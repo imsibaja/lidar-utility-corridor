@@ -1,0 +1,19 @@
+name: lidar-corridor
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pdal
+  - python-pdal
+  - laspy
+  - lazrs-python
+  - geopandas
+  - rioxarray
+  - rasterio
+  - numpy
+  - pandas
+  - matplotlib
+  - jupyter
+  - ipykernel
+  - pytest

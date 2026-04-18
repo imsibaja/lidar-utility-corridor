@@ -1,0 +1,22 @@
+{
+  "pipeline": [
+    {
+      "type": "readers.las",
+      "filename": "PLACEHOLDER_INPUT.laz",
+      "_comment": "Stage 1: Read raw LiDAR point cloud. Replace PLACEHOLDER_INPUT with actual file path."
+    },
+    {
+      "type": "filters.csf",
+      "_comment": "Stage 2: Ground classification using Cloth Simulation Filter. Parameters TBD — review PDAL CSF documentation before setting slope_smooth, resolution, and rigidness."
+    },
+    {
+      "type": "filters.hag_nn",
+      "_comment": "Stage 3: Height Above Ground normalization using nearest-neighbor ground interpolation. Adds HeightAboveGround dimension to each point."
+    },
+    {
+      "type": "writers.las",
+      "filename": "PLACEHOLDER_OUTPUT.laz",
+      "_comment": "Stage 4: Write normalized point cloud. Replace PLACEHOLDER_OUTPUT with actual output path."
+    }
+  ]
+}
