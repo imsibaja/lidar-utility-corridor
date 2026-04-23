@@ -1,5 +1,8 @@
 *.laz
 *.las
+ASSIGNMENT.md
+ASSIGNMENT.html
+ASSIGNMENT_files
 data/raw/*
 !data/raw/.gitkeep
 data/processed/*
@@ -12,4 +15,5 @@ outputs/tables/*
 !outputs/tables/.gitkeep
 *.ipynb_checkpoints
 __pycache__
+.DS_Store
 .env

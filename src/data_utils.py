@@ -2,6 +2,9 @@
 Utilities for loading, inspecting, and validating USGS 3DEP LiDAR point clouds.
 """
 
+import laspy
+import numpy as np
+
 
 def load_laz(filepath):
     """
@@ -18,7 +21,7 @@ def load_laz(filepath):
         Parsed point cloud object with access to all dimensions (x, y, z,
         classification, return_number, intensity, etc.).
     """
-    raise NotImplementedError
+    return laspy.read(filepath)
 
 
 def inspect_point_cloud(las_data):
@@ -43,7 +46,27 @@ def inspect_point_cloud(las_data):
     None
         Prints summary to stdout.
     """
-    raise NotImplementedError
+    # Print point count and classification distribution
+    print(f"Total points: {len(las_data)}")
+    
+    # Print distibution of classification codes
+    class_dist = dict(zip(*np.unique(las_data.classification, return_counts=True)))
+    print("Classification distribution:")
+    for cls, count in class_dist.items():
+        print(f"  Class {cls}: {count} points")
+        
+    # Print bounding box info
+    print("Bounding box:")
+    print(f"xmin: {las_data.x.min()}, xmax: {las_data.x.max()}")
+    print(f"ymin: {las_data.y.min()}, ymax: {las_data.y.max()}")
+    print(f"zmin: {las_data.z.min()}, zmax: {las_data.z.max()}")
+    
+    las_xrange = (las_data.x.max() - las_data.x.min())
+    las_yrange = (las_data.y.max() - las_data.y.min())
+    
+    # Print estimated point density
+    print(f"Estimated point density (pts/m²): {len(las_data) / (las_xrange * las_yrange)}")
+
 
 
 def validate_crs(las_data, expected_epsg):
@@ -72,4 +95,9 @@ def validate_crs(las_data, expected_epsg):
     ValueError
         If the point cloud CRS does not match expected_epsg.
     """
-    raise NotImplementedError
+    
+    epsg = las_data.header.parse_crs().to_epsg()
+    if epsg != expected_epsg:   
+        raise ValueError(f"CRS mismatch: expected EPSG:{expected_epsg}, got EPSG:{epsg}")
+
+    return True

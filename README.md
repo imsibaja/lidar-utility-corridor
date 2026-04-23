@@ -40,14 +40,27 @@ This project represents my first systematic engagement with LiDAR point cloud pr
 
 ## Study Area
 
-**TBD** — The target area is a California utility corridor with USGS 3DEP QL1 or QL2 LiDAR coverage.
+**Southern Los Padres National Forest, Ventura County, California** — a ~1km² tile a few miles northwest of the confluence of Sespe Creek and the Santa Clara River. Selected because it covers terrain personally familiar to the author, which aids sanity-checking of outputs.
 
-Candidate regions under consideration:
-- Ventura County (SCE transmission corridors, mixed chaparral/oak)
-- Santa Barbara County foothills (high fire-weather exposure, complex terrain)
-- San Bernardino foothills (high tree density, documented outage history)
+The tile spans a landscape transition: the northern half is a greener, more densely vegetated valley within the Los Padres forest; the southern half is sparser, drier terrain closer to agricultural and residential land use — a realistic analog for wildfire-risk utility corridor assessment in a region with documented fire-weather exposure.
 
-To select a specific tile, use the [OpenTopography](https://opentopography.org) map interface or the [USGS National Map Availability Viewer](https://apps.nationalmap.gov/viewer/) to confirm QL1/QL2 coverage for the area of interest before downloading. A 1km² tile is recommended to keep file sizes manageable during initial development.
+**Selected tile extent (EPSG:32611, meters):**
+
+| | X (Easting) | Y (Northing) |
+|---|---|---|
+| Min | 318460.92 | 3812133.65 |
+| Max | 319501.66 | 3813031.62 |
+
+- **Approximate dimensions:** 1,041m × 898m (~0.93 km²)
+- **Point count:** ~2,092,000
+- **Effective point density:** ~2.2 pts/m²
+- **Survey date:** April 2–26, 2007
+- **Collector:** NCALM (National Center for Airborne Laser Mapping)
+- **Dataset:** EarthScope Southern & Eastern California Lidar Project (OpenTopography ID: OTLAS.122009.32611.1)
+- **DOI:** https://doi.org/10.5069/G9G44N6Q
+- **License:** CC BY 4.0
+
+> **Note on acquisition date:** Data was acquired in 2007. Vegetation conditions will differ from present-day. CHM outputs reflect 2007 canopy structure. For the purposes of learning the processing workflow this has no impact.
 
 ---
 
@@ -55,7 +68,7 @@ To select a specific tile, use the [OpenTopography](https://opentopography.org) 
 
 | Dataset | Source | Access | Format | Notes |
 |---|---|---|---|---|
-| USGS 3DEP LiDAR Point Cloud | OpenTopography (opentopography.org) | Free, no account required | .laz | QL1 or QL2 required; select 1km² tile to manage file size |
+| EarthScope SoCal LiDAR (NCALM, 2007) | OpenTopography — DOI: 10.5069/G9G44N6Q | Free, CC BY 4.0 | .laz | EPSG:32611; ~2.2 pts/m²; ellipsoidal vertical datum |
 | CA Transmission Lines | CA Energy Commission GIS | Free, public | Shapefile | Used to define corridor centerline |
 | NLCD 2021 or CALVEG | USGS / USFS | Free, public | GeoTIFF | Optional vegetation context layer; NLCD 2021 also used for accuracy assessment |
 
@@ -69,7 +82,7 @@ USGS 3DEP LiDAR is distributed at three quality levels. **QL3 is insufficient fo
 - **QL2** (Quality Level 2): ≤0.71 pts/m² ground density, typically 2+ pts/m² total density. Adequate for 1m CHM with careful parameter selection.
 - **QL3**: Insufficient ground point density for reliable 1m CHM. Not suitable for this workflow.
 
-The target tile and region of interest are TBD. Select a tile using the [USGS National Map Availability Viewer](https://apps.nationalmap.gov/viewer/) to confirm quality level before download.
+The selected tile is from the EarthScope Southern & Eastern California Lidar Project, downloaded via OpenTopography.
 
 #### Recommended Download Methods
 
@@ -80,10 +93,14 @@ Two options are available for obtaining 3DEP LiDAR tiles:
 
 #### CRS and Vertical Datum
 
-USGS 3DEP LiDAR is distributed in state plane or UTM projections with **NAVD88** as the vertical datum. Before processing:
+The selected tile uses the following coordinate reference system:
 
-1. **Verify the horizontal CRS** of the downloaded tile (check the .laz file header or accompanying metadata). Reproject to a consistent projected CRS before processing. For Southern California, UTM Zone 11N (EPSG:26911 / NAD83) is a common target.
-2. **Confirm the vertical datum is NAVD88** before any elevation-dependent analysis. Mixing vertical datums will produce erroneous CHM values.
+- **Horizontal CRS:** WGS84 / UTM Zone 11N — **EPSG:32611**
+- **Vertical datum:** Ellipsoid (not NAVD88)
+
+The ellipsoidal vertical datum does not affect CHM accuracy because CHM = DSM − DTM cancels the absolute elevation reference. Heights in the CHM are relative to local ground, regardless of vertical datum.
+
+All spatial operations (buffering, clipping, rasterization) require a projected CRS with linear units of meters. A geographic CRS (degrees) will produce incorrect distances and must not be used.
 
 All spatial operations (buffering, clipping, rasterization) require a projected CRS with linear units of meters. A geographic CRS (degrees) will produce incorrect distances and must not be used.
 
@@ -272,8 +289,8 @@ Quantifies commission error (false detections: trees flagged by the model that d
 Honest documentation of what is not yet validated. These will be updated as the workflow matures.
 
 - [ ] Ground classification filter parameters not yet validated against reference data
-- [ ] CHM resolution choice (target: 1m) not yet benchmarked against actual point density of the selected tile
-- [ ] Corridor centerline not yet verified against as-built transmission line locations
+- [ ] CHM resolution choice (target: 1m) not yet benchmarked against actual point density of the selected tile (~2.2 pts/m²)
+- [ ] Corridor centerline not yet identified or verified for the Sespe Creek / Santa Clara River study area
 - [ ] Height threshold value (default: 15ft / ~4.57m) is illustrative; real utility standards vary by voltage class and are defined in FAC-003-4
 - [ ] No accuracy assessment has been performed yet — CHM quality claims are provisional until `validation/accuracy_assessment.py` is executed
 
