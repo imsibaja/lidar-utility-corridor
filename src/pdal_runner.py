@@ -2,6 +2,9 @@
 Wrappers for executing PDAL pipeline JSON files from Python.
 """
 
+import json
+import subprocess
+from pathlib import Path
 
 def run_pipeline(pipeline_json_path, input_laz, output_laz):
     """
@@ -23,7 +26,8 @@ def run_pipeline(pipeline_json_path, input_laz, output_laz):
 
     Returns
     -------
-    None
+    str
+        A success message if the pipeline executes without errors.
 
     Raises
     ------
@@ -32,7 +36,34 @@ def run_pipeline(pipeline_json_path, input_laz, output_laz):
     RuntimeError
         If the PDAL pipeline exits with a non-zero return code.
     """
-    raise NotImplementedError
+    
+    pipeline_json_path = Path(pipeline_json_path)
+    input_laz = Path(input_laz)
+    output_laz = Path(output_laz)
+
+    if not pipeline_json_path.exists():
+        raise FileNotFoundError(f"Pipeline JSON file not found: {pipeline_json_path}")
+
+    if not input_laz.exists():
+        raise FileNotFoundError(f"Input LAZ file not found: {input_laz}")
+
+    pipeline = json.loads(pipeline_json_path.read_text())
+    pipeline["pipeline"][0]["filename"] = str(input_laz)
+    pipeline["pipeline"][-1]["filename"] = str(output_laz)
+
+    res = subprocess.run(
+        ["pdal", "pipeline", "--stdin"],
+        input=json.dumps(pipeline),
+        capture_output=True,
+        text=True,
+    )
+
+    if res.returncode != 0:
+        raise RuntimeError(f"PDAL pipeline execution failed: {res.stderr}")
+
+    return "PDAL pipeline executed successfully."
+    
+    
 
 
 def check_pdal_available():
@@ -54,4 +85,18 @@ def check_pdal_available():
     EnvironmentError
         If PDAL is not found on PATH or the version call fails.
     """
-    raise NotImplementedError
+    # Check if PDAL is available by running `pdal --version`
+    res = subprocess.run(["pdal", "--version"], capture_output=True, text=True)
+    
+    error_message = (
+        "PDAL is not available on PATH."
+        "PDAL must be installed via conda-forge (not pip) due to system-level "
+        "C++ library dependencies. Installation via pip is not supported."
+        "See: https://pdal.io/en/stable/development/compilation/index.html"
+    )
+    
+    # Check if the command executed successfully
+    if res.returncode != 0:
+        raise EnvironmentError(error_message)
+    
+    return res.stdout.strip("'-\n")
