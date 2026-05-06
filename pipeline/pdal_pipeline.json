@@ -15,7 +15,8 @@
     },
     {
       "type": "writers.las",
-      "filename": "PLACEHOLDER_OUTPUT"
+      "filename": "PLACEHOLDER_OUTPUT",
+      "extra_dims": "HeightAboveGround=float32"
     }
   ]
 }
