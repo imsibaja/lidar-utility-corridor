@@ -96,32 +96,35 @@ def rasterize_to_dtm(normalized_laz_path, resolution, output_path):
     None
         Writes DTM GeoTIFF to output_path.
     """
-    normalized_las = load_laz(normalized_laz_path)
-    
+    all_las = load_laz(normalized_laz_path)
+
+    # Capture full-tile extent from all points before filtering
+    xmin, xmax = all_las.x.min(), all_las.x.max()
+    ymin, ymax = all_las.y.min(), all_las.y.max()
+
     # Filter to ground points (classification code 2)
-    normalized_las = normalized_las[normalized_las.classification == 2]
+    ground_las = all_las[all_las.classification == 2]
 
-    # Rasterize using minimum elevation per cell to represent the terrain surface
-    ncols = np.floor((normalized_las.x - normalized_las.x.min()) / resolution).astype(int)
-    nrows = np.floor((normalized_las.y.max() - normalized_las.y) / resolution).astype(int)
+    # Compute pixel indices using full-tile extent so grid matches DSM exactly
+    ncols = np.floor((ground_las.x - xmin) / resolution).astype(int)
+    nrows = np.floor((ymax - ground_las.y) / resolution).astype(int)
 
-    # Initialize an array to hold the minimum elevation values for each cell
-    scatter_min = np.full((nrows.max() + 1, ncols.max() + 1), np.inf)  
+    grid_rows = int(np.ceil((ymax - ymin) / resolution))
+    grid_cols = int(np.ceil((xmax - xmin) / resolution))
+    scatter_min = np.full((grid_rows, grid_cols), np.inf)
 
-    # Use np.minimum.at to compute the minimum height above ground for each cell
-    np.minimum.at(scatter_min, (nrows, ncols), normalized_las.HeightAboveGround)
-    
-    # Replace np.inf with NaN to indicate cells with no ground points 
+    np.minimum.at(scatter_min, (nrows, ncols), ground_las.HeightAboveGround)
+
     scatter_min[scatter_min == np.inf] = np.nan
-    
-    # Validate that the resulting DTM raster has the same dimensions and georeferencing as the DSM raster
-    output_path_dsm = Path(str(output_path).replace("dtm", "dsm"))  # Assuming DSM is saved with a similar naming convention
+
+    # Validate shape and transform match the DSM before writing
+    output_path_dsm = Path(str(output_path).replace("dtm", "dsm"))
     with rasterio.open(output_path_dsm) as dsm_src:
         dsm_data = dsm_src.read(1)
-    # This is a simplified validation; in practice, you might want to check more detailed metadata
+        dsm_meta = dsm_src.meta
     assert scatter_min.shape == dsm_data.shape, "Shape mismatch between DTM and DSM"
+    assert dsm_meta['crs'].to_epsg() == 32611, "DSM CRS is not EPSG:32611"
 
-    # Write the DTM raster to a GeoTIFF file
     with rasterio.open(
         output_path,
         'w',
@@ -130,13 +133,8 @@ def rasterize_to_dtm(normalized_laz_path, resolution, output_path):
         width=scatter_min.shape[1],
         count=1,
         dtype=scatter_min.dtype,
-        crs='EPSG:32611', 
-        transform=rasterio.transform.from_origin(
-            normalized_las.x.min(), 
-            normalized_las.y.max(), 
-            resolution, 
-            resolution
-        )
+        crs='EPSG:32611',
+        transform=rasterio.transform.from_origin(xmin, ymax, resolution, resolution)
     ) as dst:
         dst.write(scatter_min, 1)
 
@@ -177,17 +175,12 @@ def compute_chm(dsm_path, dtm_path, output_path):
 
     # Validate that DSM and DTM metadata are compatible for CHM computation
     assert dsm_meta['crs'] == dtm_meta['crs'], "CRS mismatch between DSM and DTM"
-    # The transform includes pixel size and origin; it must be identical for both rasters to ensure proper alignment
-    assert dtm_meta['transform'] == dsm_meta['transform'], "Transform mismatch between DSM and DTM"
-    # The width and height must also match to ensure pixel-wise subtraction is valid
-    assert chm_meta['width'] == dsm_meta['width'] == dtm_meta['width'], "Width mismatch between DSM and DTM"
-    assert chm_meta['height'] == dsm_meta['height'] == dtm_meta['height'], "Height mismatch between DSM and DTM"
+    assert dsm_meta['transform'] == dtm_meta['transform'], "Transform mismatch between DSM and DTM"
+    assert dsm_meta['width'] == dtm_meta['width'], "Width mismatch between DSM and DTM"
+    assert dsm_meta['height'] == dtm_meta['height'], "Height mismatch between DSM and DTM"
 
     # Compute CHM by subtracting DTM from DSM
     chm = dsm - dtm
-    
-    # CHM metadata should match the DSM/DTM metadata (same CRS, transform, resolution)
-    # 'numpy.ndarray' object has no attribute 'meta'
     chm_meta = dsm_meta.copy()
     
     # Clamp negative values to zero
