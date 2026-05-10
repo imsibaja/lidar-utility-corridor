@@ -105,7 +105,7 @@ def buffer_corridor(gdf, buffer_distance_m = 15):
     if gdf.crs.is_geographic:
         gdf = gdf.to_crs("EPSG:32611")
         warnings.warn("Input GeoDataFrame was in a geographic CRS. Reprojected to EPSG:32611 for buffering. Verify that this CRS is appropriate for your region and use case.")
-    
+
     return gdf.buffer(buffer_distance_m)
 
 
@@ -186,82 +186,53 @@ def threshold_exceedance(chm_clipped_path, height_threshold_m):
     """
     # Context manager guarantees the file handle closes even if an error is raised mid-read.
     with rasterio.open(chm_clipped_path) as src:
-        # read(1) pulls band 1 as a 2D numpy array. Explicitly cast to float32 because
-        # rasterio.features.shapes() only accepts uint8, uint16, int16, and float32 —
-        # if the GeoTIFF was written as float64, passing it raw would raise a TypeError.
+        # Pull Band 1, the CHM values
         chm_arr = src.read(1).astype(np.float32)
 
-        # The Affine transform maps pixel row/column indices to real-world coordinates.
-        # shapes() requires it so the output polygon vertices are in UTM meters,
-        # not pixel-index space (0, 1, 2, ...).
+        # Map array indicies as real coordinates
         transform = src.transform
 
-        # Preserve the raster's CRS so the output GeoDataFrame is spatially registered
-        # and can be reprojected, spatially joined, or saved to GeoPackage correctly.
+        # Preserve the raster's CRS 
         crs = src.crs
 
-    # Element-wise boolean comparison: True where vegetation exceeds the threshold,
-    # False everywhere else. This is the core threshold logic; result dtype is bool.
+    # Mask where CHM exceeds height threshold
     mask_arr = chm_arr > height_threshold_m
 
-    # Connected-component labeling: assigns a unique integer ID to each spatially
-    # contiguous island of True pixels (4-connectivity by default). The output
-    # `labeled` is an int array the same shape as mask_arr — zone 1 pixels all have
-    # value 1, zone 2 pixels have value 2, etc. Background (False) pixels stay 0.
-    # `n` is the total count of distinct exceedance zones found.
-    # We need this because shapes() alone vectorizes pixels but has no concept of
-    # grouping them into zones or computing a representative height per zone.
+    # Label zones of contiguous True pixels in the mask. 
     labeled, n = ndimage.label(mask_arr)
 
-    # Guard: if no pixel exceeds the threshold, n == 0 and there is nothing to vectorize.
-    # Calling ndimage.mean(..., range(1, 1)) on an empty range would raise an error,
-    # so return an empty but correctly-schemed GeoDataFrame so downstream saves don't break.
+    # Return empty GDF if no exceedances found
     if n == 0:
+        message = f"No exceedances found above {height_threshold_m}m. Returning empty GeoDataFrame:"
+        warnings.warn(message)
         return gpd.GeoDataFrame({"geometry": [], "height_m": []}, crs=crs)
 
-    # Compute the mean CHM value for each labeled zone. chm_arr supplies the values,
-    # labeled supplies the zone map, and range(1, n+1) lists which labels to compute
-    # (skipping 0, the background). Result is a list of n floats — one per zone.
-    # Mean is used rather than max because it is more robust to single-pixel spikes
-    # and is the more conservative choice for vegetation management reporting.
+    # Compute the mean CHM value for each labeled zone.
     mean_heights = ndimage.mean(chm_arr, labeled, range(1, n + 1))
 
-    # Build a label -> mean_height dict. shapes() yields (geom, label_value) pairs in
-    # no guaranteed order, so the lookup lets us attach the correct height to each
-    # polygon regardless of iteration order. enumerate(..., start=1) aligns with the
-    # label integers produced by ndimage.label (which start at 1, not 0).
+    # Build a label -> mean_height dict. 0 is background, enumeration begins at 1. 
     height_lookup = dict(enumerate(mean_heights, start=1))
 
     seen = set()
     records = []
     for geom_dict, val in shapes(
-        # shapes() rejects int32/int64 (what ndimage.label produces) with a TypeError,
-        # so cast to int16. Supports up to 32,767 distinct zones — sufficient for a
-        # corridor-scale clip.
+        
         labeled.astype(np.int16),
-        # The mask argument tells shapes() which pixels to include. Pixels where mask
-        # is 0 are skipped entirely. Without this, shapes() would also vectorize the
-        # background as one giant polygon covering the whole raster extent.
+        # Mask exceedance zones
         mask=mask_arr.astype(np.uint8),
-        # Applies the Affine transform so output vertices are in real-world UTM coords.
+        # Transform pixel coordinates to real-world coordinates
         transform=transform,
     ):
-        # val comes back as float even though the source is int16; cast it back.
+        # LV or label value
         lv = int(val)
 
-        # lv == 0 catches any background pixels that slip through despite the mask.
-        # lv in seen catches duplicates: shapes() can yield the same label more than
-        # once for complex zone boundaries; skipping repeats prevents double-counting.
+        # skip loop if already seen this label value or if it's 0 (background)
         if lv == 0 or lv in seen:
             continue
         seen.add(lv)
 
-        # shape() converts the GeoJSON-style dict from shapes() into a Shapely Polygon.
-        # height_lookup[lv] attaches the mean CHM height for this zone as height_m.
+        # append a dict with geometry and mean height for this exceedance zone to the records list
         records.append({"geometry": shape(geom_dict), "height_m": height_lookup[lv]})
-
-    # Build the GeoDataFrame from the list of dicts (one row per exceedance zone).
-    # crs= propagates the raster's CRS so the polygons are spatially registered and
-    # can be saved directly to outputs/vector/flagged_trees.gpkg.
+        
     return gpd.GeoDataFrame(records, crs=crs)
 
