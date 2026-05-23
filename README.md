@@ -34,7 +34,7 @@ Trees growing into or near transmission line rights-of-way create flashover risk
 
 ### A note on learning context
 
-This project represents my first systematic engagement with LiDAR point cloud processing. Methods are documented explicitly so the workflow is reproducible and legible to reviewers. Where parameter choices are uncertain or not yet validated, that uncertainty is noted directly in the code and this document rather than obscured.
+This project represents my first attempt at LiDAR point cloud processing. Methods are documented explicitly so the workflow is reproducible and legible to reviewers. Where parameter choices are uncertain or not yet validated, that uncertainty is noted directly in the code and this document rather than obscured. This ais an exploratory excersize where methods and results are not peer reviewed.
 
 ---
 
@@ -52,15 +52,18 @@ The tile spans a landscape transition: the northern half is a greener, more dens
 | Max | 319501.66 | 3813031.62 |
 
 - **Approximate dimensions:** 1,041m × 898m (~0.93 km²)
-- **Point count:** ~2,092,000
-- **Effective point density:** ~2.2 pts/m²
-- **Survey date:** April 2–26, 2007
-- **Collector:** NCALM (National Center for Airborne Laser Mapping)
-- **Dataset:** EarthScope Southern & Eastern California Lidar Project (OpenTopography ID: OTLAS.122009.32611.1)
-- **DOI:** https://doi.org/10.5069/G9G44N6Q
-- **License:** CC BY 4.0
+- **Point count:** ~5,578,060
+- **Effective point density:** 5.92 pts/m²
+- **Survey dates (QL2, B3 block):** May 27 – July 22, 2018
+- **Collector:** Woolpert (for USGS NGP)
+- **Dataset:** USGS LPC CA SoCal Wildfires B3 2018 LAS 2019
+- **LAZ source:** OpenTopography (USGS 3DEP) — https://portal.opentopography.org/usgsDataset?dsid=USGS_LPC_CA_SoCal_Wildfires_B3_2018_LAS_2019
+- **Job ID:** usgs1778202769174 (submitted 2026-05-08; bounding box defined in EPSG:3857 web map interface; working LAZ in EPSG:32611)
+- **License:** US Government Public Domain; OpenTopography login required for download (.edu / OT+; temporarily open for LA wildfire response)
+- **OpenTopography cite as:** U.S. Geological Survey (2021). USGS LPC CA SoCal Wildfires B3 2018 LAS 2019. Distributed by OpenTopography. https://portal.opentopography.org/usgsDataset?dsid=USGS_LPC_CA_SoCal_Wildfires_B3_2018_LAS_2019. Accessed 2026-05-14.
+- **Formal metadata (NOAA InPort):** https://www.fisheries.noaa.gov/inport/item/74383 (GUID: gov.noaa.nmfs.inport:74383)
 
-> **Note on acquisition date:** Data was acquired in 2007. Vegetation conditions will differ from present-day. CHM outputs reflect 2007 canopy structure. For the purposes of learning the processing workflow this has no impact.
+> **Note on acquisition date:** Data was acquired in 2018. Vegetation conditions will differ from present-day (~7 years of growth). CHM outputs reflect 2018 canopy structure. For the purposes of learning the processing workflow this has no impact.
 
 ---
 
@@ -68,7 +71,7 @@ The tile spans a landscape transition: the northern half is a greener, more dens
 
 | Dataset | Source | Access | Format | Notes |
 |---|---|---|---|---|
-| EarthScope SoCal LiDAR (NCALM, 2007) | OpenTopography — DOI: 10.5069/G9G44N6Q | Free, CC BY 4.0 | .laz | EPSG:32611; ~2.2 pts/m²; ellipsoidal vertical datum |
+| USGS LPC CA SoCal Wildfires B3 2018 (Woolpert) | OpenTopography (USGS 3DEP) — LAZ files; NOAA InPort 74383 for formal metadata | Login required (OpenTopography) | .laz | Native: EPSG:6350 + EPSG:5703 (NAVD88); reprojected to EPSG:32611 on download; 5.92 pts/m² |
 | CA Transmission Lines | CA Energy Commission GIS | Free, public | Shapefile | Used to define corridor centerline |
 | NLCD 2021 or CALVEG | USGS / USFS | Free, public | GeoTIFF | Optional vegetation context layer; NLCD 2021 also used for accuracy assessment |
 
@@ -82,25 +85,24 @@ USGS 3DEP LiDAR is distributed at three quality levels. **QL3 is insufficient fo
 - **QL2** (Quality Level 2): ≤0.71 pts/m² ground density, typically 2+ pts/m² total density. Adequate for 1m CHM with careful parameter selection.
 - **QL3**: Insufficient ground point density for reliable 1m CHM. Not suitable for this workflow.
 
-The selected tile is from the EarthScope Southern & Eastern California Lidar Project, downloaded via OpenTopography.
+The selected tile is from the USGS LPC CA SoCal Wildfires B3 2018 collection, accessed via OpenTopography. OpenTopography serves this dataset as part of the USGS 3DEP collection hosted on AWS, and allows subsetting by bounding box with optional reprojection on download.
 
 #### Recommended Download Methods
 
-Two options are available for obtaining 3DEP LiDAR tiles:
+Two options are available for obtaining tiles from this collection:
 
-- **OpenTopography REST API** — preferred for programmatic access. Enables reproducible, scripted tile selection and download. See [opentopography.org](https://opentopography.org) for API documentation.
-- **USGS National Map Downloader** ([tnmaccess.usgs.gov](https://tnmaccess.usgs.gov)) — web interface for manual tile selection and direct download. Useful for initial tile identification.
+- **OpenTopography** ([opentopography.org](https://opentopography.org)) — preferred for interactive tile subsetting and reprojection. Requires login (.edu / OT+ membership). Provides the LAZ point cloud files used in this project. Find the dataset by searching "SoCal Wildfires B3 2018."
+- **USGS S3 (bulk GeoTIFF DEM tiles)** — direct bulk access to the bare-earth DEM product: `https://prd-tnm.s3.amazonaws.com/index.html?prefix=StagedProducts/Elevation/OPR/Projects/CA_SoCAL_Wildfires_2018_D18/CA_SoCal_Wildfires_B2_2018/TIFF/`
 
 #### CRS and Vertical Datum
 
 The selected tile uses the following coordinate reference system:
 
-- **Horizontal CRS:** WGS84 / UTM Zone 11N — **EPSG:32611**
-- **Vertical datum:** Ellipsoid (not NAVD88)
+- **Native horizontal CRS:** NAD83 (2011) / Conus Albers — **EPSG:6350**
+- **Native vertical datum:** NAVD88 (GEOID12B / geoid18) — **EPSG:5703**
+- **Working CRS (downloaded files):** NAD83 / UTM Zone 11N — **EPSG:32611** (reprojected by OpenTopography on download; reflected in the `_32611` filename suffix)
 
-The ellipsoidal vertical datum does not affect CHM accuracy because CHM = DSM − DTM cancels the absolute elevation reference. Heights in the CHM are relative to local ground, regardless of vertical datum.
-
-All spatial operations (buffering, clipping, rasterization) require a projected CRS with linear units of meters. A geographic CRS (degrees) will produce incorrect distances and must not be used.
+The vertical datum does not affect CHM accuracy because CHM = DSM − DTM cancels the absolute elevation reference. Heights in the CHM are relative to local ground regardless of whether the source is NAVD88 or ellipsoidal.
 
 All spatial operations (buffering, clipping, rasterization) require a projected CRS with linear units of meters. A geographic CRS (degrees) will produce incorrect distances and must not be used.
 
@@ -289,7 +291,7 @@ Quantifies commission error (false detections: trees flagged by the model that d
 Honest documentation of what is not yet validated. These will be updated as the workflow matures.
 
 - [ ] Ground classification filter parameters not yet validated against reference data
-- [ ] CHM resolution choice (target: 1m) not yet benchmarked against actual point density of the selected tile (~2.2 pts/m²)
+- [ ] CHM resolution choice (target: 1m) not yet benchmarked against actual point density of the selected tile (5.92 pts/m²)
 - [ ] Corridor centerline not yet identified or verified for the Sespe Creek / Santa Clara River study area
 - [ ] Height threshold value (default: 15ft / ~4.57m) is illustrative; real utility standards vary by voltage class and are defined in FAC-003-4
 - [ ] No accuracy assessment has been performed yet — CHM quality claims are provisional until `validation/accuracy_assessment.py` is executed
