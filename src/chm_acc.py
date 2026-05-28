@@ -8,14 +8,14 @@ import numpy as np
 import rasterio
 
 def assess_chm_accuracy(chm_path, fire_perimeter_path, output_path):
-    
+
     """
     Assess CHM accuracy by comparing canopy heights inside and outside a fire perimeter.
-    
+
     Loads the CHM and creates masks for areas inside and outside the fire perimeter.
-    Computes mean and median CHM for each zone, with the expectation that inside 
-    perimeter mean CHM should be significantly lower than outside. Records mean CHM 
-    inside, mean CHM outside, difference, and percentage of inside pixels at or below 
+    Computes mean and median CHM for each zone, with the expectation that inside
+    perimeter mean CHM should be significantly lower than outside. Records mean CHM
+    inside, mean CHM outside, difference, and percentage of inside pixels at or below
     0.5m (bare ground). Writes summary statistics to CSV.
 
     Parameters
@@ -30,14 +30,17 @@ def assess_chm_accuracy(chm_path, fire_perimeter_path, output_path):
     Returns
     -------
     accuracy_df: pandas.DataFrame
-        DataFrame containing mean CHM inside, mean CHM outside, 
+        DataFrame containing mean CHM inside, mean CHM outside,
         mean difference, and percent bare ground inside the fire perimeter.
     """
-    
+
     with rasterio.open(chm_path) as chm:
         chm_data = chm.read(1)
         chm_meta = chm.meta
-    
+        nodata = chm.nodata
+
+    valid_mask = np.isfinite(chm_data)
+
     fire_perimeter_gdf = gpd.read_file(fire_perimeter_path).to_crs(chm_meta['crs'])
     fire_mask = rasterio.features.geometry_mask(
         fire_perimeter_gdf.geometry,
@@ -45,18 +48,18 @@ def assess_chm_accuracy(chm_path, fire_perimeter_path, output_path):
         transform=chm_meta['transform'],
         invert=True
         )
-    
-    chm_inside = chm_data[fire_mask]
-    chm_outside = chm_data[~fire_mask]  
-    
-    mean_inside = np.nanmean(chm_inside)
-    mean_outside = np.nanmean(chm_outside)
+
+    chm_inside = chm_data[fire_mask & valid_mask]
+    chm_outside = chm_data[~fire_mask & valid_mask]
+
+    mean_inside = np.mean(chm_inside)
+    mean_outside = np.mean(chm_outside)
     mean_diff = mean_outside - mean_inside
-    
-    median_inside = np.nanmedian(chm_inside)
-    median_outside = np.nanmedian(chm_outside)
+
+    median_inside = np.median(chm_inside)
+    median_outside = np.median(chm_outside)
     median_diff = median_outside - median_inside
-    
+
     percent_bare_ground = np.sum(chm_inside <= 0.5) / len(chm_inside) * 100
     
     accuracy_summary = {
