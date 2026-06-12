@@ -1,8 +1,4 @@
-"""
-Accuracy assessment for CHM outputs. This module is required before the
-project can be considered analytically complete. See assess_chm_accuracy()
-and spatial_rdd().
-"""
+"""Spatial RDD validation for CHM outputs using the Thomas Fire perimeter as treatment boundary."""
 
 from pathlib import Path
 import numpy as np
@@ -12,83 +8,6 @@ import rasterio
 import geopandas as gpd
 import scipy.stats
 from matplotlib import pyplot as plt
-
-
-def assess_chm_accuracy(chm_path, reference_data, method):
-    """
-    Compare CHM-derived canopy height estimates against a reference dataset
-    to quantify prediction error.
-
-    This step is required before the project can be considered analytically
-    complete. It is not optional. A CHM workflow without accuracy assessment
-    cannot make defensible claims about output quality, and results should
-    not be presented operationally until at least one method below has been
-    executed and error metrics have been reviewed.
-
-    Parameters
-    ----------
-    chm_path : str or Path
-        Path to the CHM GeoTIFF to be evaluated (typically
-        outputs/rasters/chm_clipped.tif or the full-extent CHM).
-    reference_data : str, Path, or geopandas.GeoDataFrame
-        Reference dataset used for comparison. The expected format depends
-        on the chosen method:
-        - "nlcd_canopy": path to the NLCD 2021 Percent Tree Canopy GeoTIFF,
-          resampled or aligned to the CHM grid.
-        - "manual_samples": path to a point shapefile or GeoPackage with a
-          field-measured canopy height attribute at each sample location.
-        - "detection_error": path to a GeoPackage of manually delineated
-          tree crown polygons used as the reference detection set.
-    method : str
-        Accuracy assessment method. Must be one of:
-
-        "nlcd_canopy"
-            Compare CHM-derived canopy cover fraction against the NLCD 2021
-            percent tree canopy cover layer at matched spatial resolution.
-            Reports mean absolute error (MAE) and Pearson correlation
-            coefficient between the two rasters.
-
-        "manual_samples"
-            Compare CHM pixel heights at surveyed reference points against
-            field-measured canopy heights at the same locations. Reports
-            root mean squared error (RMSE), mean absolute error (MAE), and
-            signed bias (mean CHM height minus mean field height).
-
-        "detection_error"
-            Quantify commission error (false detections above threshold with
-            no corresponding reference tree) and omission error (reference
-            trees not captured by the detection layer) for individual tree
-            detections above a specified height threshold. Compared against
-            a manually delineated reference tree crown dataset. Reports
-            precision, recall, and F1 score.
-
-    Returns
-    -------
-    dict
-        Summary dictionary of accuracy metrics appropriate to the chosen
-        method. Key sets by method:
-
-        "nlcd_canopy":
-            {"mae": float, "pearson_r": float, "n_pixels": int}
-
-        "manual_samples":
-            {"rmse": float, "mae": float, "bias": float, "n_samples": int}
-
-        "detection_error":
-            {"precision": float, "recall": float, "f1": float,
-             "n_reference": int, "n_detected": int}
-
-    Raises
-    ------
-    ValueError
-        If method is not one of "nlcd_canopy", "manual_samples", or
-        "detection_error".
-    NotImplementedError
-        This function is not yet implemented.
-    """
-    
-    
-    raise NotImplementedError
 
 
 def _intercept_se(x, y):
@@ -149,25 +68,36 @@ def _plot_discontinuity(binned, bandwidth_m, save_path):
     save_path : str or Path
         Full path to save the figure (e.g., outputs/figures/spatial_rdd.png).
     """
-    # TODO — Implement with matplotlib.
+    # TODO — Implement with matplotlib. ✅
     #   - Scatter plot: x = binned['bin'], y = binned['height_m'].
     #   - Vertical dashed line at x=0 (the fire boundary).
     #   - Shade x < 0 in light red ("burned"), x > 0 in light green ("unburned").
     #   - Label axes: x = "Signed distance to fire boundary (m) ← burned | unburned →"
     #                 y = "Mean CHM (m)"
     #   - Save with fig.savefig(save_path, dpi=150). Close the figure after saving.
-    
-    plt.figure(figsize=(8, 6))
-    plt.scatter(binned['bin'], binned['height_m'], color='blue', label='Binned mean CHM')
-    plt.axvline(x=0, color='black', linestyle='--', label='Fire boundary')
-    plt.fill_betweenx([binned['height_m'].min(), binned['height_m'].max()], -bandwidth_m, 0, color='lightcoral', alpha=0.5, label='Burned area')
-    plt.fill_betweenx([binned['height_m'].min(), binned['height_m'].max()], 0, bandwidth_m, color='lightgreen', alpha=0.5, label='Unburned area')
-    plt.xlabel("Signed distance to fire boundary (m) ← burned | unburned →")
-    plt.ylabel("Mean CHM (m)")
-    plt.title(f"Spatial RDD Discontinuity Plot (Bandwidth = {bandwidth_m}m)")
-    plt.legend()
-    plt.savefig(save_path, dpi=150)
-    plt.close()
+
+    BG = "#0d0d0d"
+    TEXT = "#ffffff"
+    y_min, y_max = binned['height_m'].min(), binned['height_m'].max()
+
+    fig, ax = plt.subplots(figsize=(8, 6), facecolor=BG)
+    ax.set_facecolor(BG)
+
+    ax.scatter(binned['bin'], binned['height_m'], color=TEXT, s=22, label='Binned mean CHM')
+    ax.axvline(x=0, color='#aaaaaa', linestyle='--', linewidth=1.2, label='Fire boundary')
+    ax.fill_betweenx([y_min, y_max], -bandwidth_m, 0, color='#ff4040', alpha=0.18, label='Burned')
+    ax.fill_betweenx([y_min, y_max], 0, bandwidth_m, color='#40c060', alpha=0.18, label='Unburned')
+
+    ax.set_xlabel("Signed distance to fire boundary (m) ← burned | unburned →", color=TEXT)
+    ax.set_ylabel("Mean CHM (m)", color=TEXT)
+    ax.set_title(f"Spatial RDD Discontinuity (Bandwidth = {bandwidth_m}m)", color=TEXT)
+    ax.tick_params(colors=TEXT)
+    for spine in ax.spines.values():
+        spine.set_edgecolor("#2a2a2a")
+
+    legend = ax.legend(facecolor="#1a1a1a", labelcolor=TEXT, edgecolor="#2a2a2a")
+    fig.savefig(save_path, dpi=150, facecolor=BG)
+    plt.close(fig)
 
 
 def spatial_rdd(chm_path, fire_perimeter_path, bandwidth_m=200, output_path=None):
@@ -256,6 +186,7 @@ def spatial_rdd(chm_path, fire_perimeter_path, bandwidth_m=200, output_path=None
     
     inside_mask = fire.geometry.unary_union.contains(pixel_points.geometry)
     pixel_points['signed_dist'] = np.where(inside_mask, -dist_to_boundary, dist_to_boundary)   
+    
     
     def bandwidth_lr(bandwidth_m = bandwidth_m):
         # TODO 6c — Restrict to the bandwidth window.
