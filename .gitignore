@@ -17,3 +17,10 @@ outputs/tables/*
 __pycache__
 .DS_Store
 .env
+
+# Quarto render outputs
+*.html
+*_files/
+_site/
+_freeze/
+.quarto/

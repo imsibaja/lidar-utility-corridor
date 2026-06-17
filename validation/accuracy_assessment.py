@@ -198,7 +198,6 @@ def spatial_rdd(chm_path, fire_perimeter_path, bandwidth_m=200, output_path=None
         n_pixels = len(pixel_points_restricted)
         if n_pixels < 50:
             raise ValueError(f"Only {n_pixels} pixels within {bandwidth_m}m bandwidth. Consider increasing bandwidth.")
-        print(f"{n_pixels} pixels within {bandwidth_m}m bandwidth included in RDD analysis.")
         
         # TODO 6d — Bin and plot the raw discontinuity.
         #   - Bin pixels into ~10m increments of signed_dist.
@@ -211,7 +210,6 @@ def spatial_rdd(chm_path, fire_perimeter_path, bandwidth_m=200, output_path=None
         figures_path = Path(output_path) / "figures"
         figures_path.mkdir(parents=True, exist_ok=True)
         _plot_discontinuity(binned, bandwidth_m, figures_path / f"spatial_rdd_bandwidth_{bandwidth_m}m.png")
-        print("Discontinuity plot saved. Look for a visible jump at x=0 as evidence of a fire effect on canopy height.")
                 
         # TODO 6e — Fit local linear regression on each side of the boundary.
         #   - Split window into burned (signed_dist < 0) and unburned (>= 0).
@@ -235,9 +233,8 @@ def spatial_rdd(chm_path, fire_perimeter_path, bandwidth_m=200, output_path=None
         se_total = np.sqrt(se_burned**2 + se_unburned**2)
         ci_lower = rdd_estimate - 1.96 * se_total
         ci_upper = rdd_estimate + 1.96 * se_total
-        print(f"RDD estimate: {rdd_estimate:.2f} m (95% CI: {ci_lower:.2f} to {ci_upper:.2f})")
         
-        return {"bandwidth_m": bandwidth_m, "rdd_estimate": rdd_estimate, "se": se_total, "ci_lower": ci_lower, "ci_upper": ci_upper, "n_pixels": n_pixels}
+        return {"bandwidth_m": bandwidth_m, "rdd_estimate": rdd_estimate, "se": se_total, "ci_upper": ci_upper, "ci_lower": ci_lower, "n_pixels": n_pixels}
 
     # TODO 6f — Sensitivity check across alternative bandwidths.
     #   - Re-run steps 6c–6e at bandwidth_m = 100, 200, and 300.
@@ -248,17 +245,24 @@ def spatial_rdd(chm_path, fire_perimeter_path, bandwidth_m=200, output_path=None
     tables_path = Path(output_path) / "tables"
     tables_path.mkdir(parents=True, exist_ok=True)
 
-    if bandwidth_m not in [100, 200, 300]:
-        bandwidths = [bandwidth_m, 100, 200, 300]
+    if bandwidth_m not in [50, 75, 100, 150, 200, 300]:
+        bandwidths = [bandwidth_m, 50, 75, 100, 150, 200, 300]
     else:
-        bandwidths = [100, 200, 300]
+        bandwidths = [50, 75, 100, 150, 200, 300]
     results = []
 
     for bw in bandwidths:
         result = bandwidth_lr(bandwidth_m=bw)
         results.append(result)
 
-    results_df = pd.DataFrame(results)
+    results_df = pd.DataFrame(results).rename(columns={
+        "bandwidth_m": "Bandwidth (m)",
+        "rdd_estimate": "RDD estimate (m)",
+        "se": "Standard Error",
+        "ci_upper": "95th Confidence Interval",
+        "ci_lower": "5th Confidence Interval",
+        "n_pixels": "Number of Pixels",
+    })
     results_df.to_csv(tables_path / "rdd_sensitivity.csv", index=False)
     print("RDD sensitivity results saved. Check for stability across bandwidths — flag if estimates vary by more than ~20%.")
 
